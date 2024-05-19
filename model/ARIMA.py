@@ -40,24 +40,26 @@ class pipline:
         self.y_min = y_min
         return y_box
     
-    def fit(self):
+    def fit(self,seasonal,start_p=1,start_q=1,start_P=1,start_Q=1,max_p=5,max_q=5,max_P=2,max_Q=2,d=None,max_d=2,D=None,max_D=1):
         y_raw = self.flights.iloc[:int(np.floor(self.flights.shape[0]*self.train_ratio)),:].loc[:,['ARRIVAL_DELAY','SD']].set_index('SD').interpolate(method='linear')
         y_test = self.flights.iloc[int(np.floor(self.flights.shape[0]*self.train_ratio)):,:].loc[:,['ARRIVAL_DELAY','SD']].set_index('SD').interpolate(method='linear')
-
         if self.is_iqr:
             y_iqr = self.IQR(y_raw)
         else:
             y_iqr = y_raw
-
         if self.is_boxcox:
             y_box = self.box_cox(y_iqr)
         else:
             y_box = y_iqr
-
-        y_box = pd.Series(y_box)
+        
+        try:
+            y_box = pd.Series(y_box)
+        except:
+            y_box=y_box
         self.y_box = y_box
 
-        model = pm.auto_arima(y_box, seasonal=True, trace=False)
+        model = pm.auto_arima(y_box, seasonal=seasonal, trace=False, start_p=start_p,start_q=start_q,start_P=start_P,start_Q=start_Q,\
+                              max_p=max_p,max_q=max_q,max_P=max_P,max_Q=max_Q,d=d,max_d=max_d,D=D,max_D=max_D)
         self.model = model
 
         y_pred = []
@@ -70,7 +72,7 @@ class pipline:
         if self.is_boxcox:
             # 对预测值进行box-cox逆变换
             y_pred = inv_boxcox(y_pred, self.lbd) + self.y_min
-
+            
         self.y_test = y_test
         self.y_pred = y_pred
 
@@ -91,7 +93,11 @@ class pipline:
 
         # 计算训练数据的残差
         y_train_pred = self.model.predict_in_sample(X=self.y_box)
-        residuals_train = self.y_box - y_train_pred
+        try:
+            residuals_train = self.y_box.values.ravel() - y_train_pred.ravel()
+        except:
+            residuals_train = self.y_box - y_train_pred
+        
 
         # 绘制训练数据残差的ACF图
         fig, ax = plt.subplots(figsize=(10, 6))
